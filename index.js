@@ -1,74 +1,114 @@
-var Twitter = require('twitter');
-var request = require('request');
+var app = null;
+var data = null;
+var express = require('express');
+var fs = require('fs');
+var lwip = require('lwip');
 var Q = require('q');
-var cheerio = require('cheerio');
-var childProc = require('child_process');
-// var sharp = require('sharp');
-var Faced = require('faced');
-var faced = new Faced();
+var port = 8080; // default port.
+var request = require('request');
+var router = null;
+
 require('./env.js');
 
-// facial recognition with cmake, make (GCC), pkg-config
-faced.detect('simon.jpg', function (faces, image, file) {
-  if (!faces) {
-    return console.log("No faces found!");
-  }
+app = express();
+port = process.env.PORT || port;
+router = express.Router();
 
-  var face = faces[0];
-
-  console.log(
-    "Found a face at %d,%d with dimensions %dx%d",
-    face.getX(),
-    face.getY(),
-    face.getWidth(),
-    face.getHeight()
-  );
+fs.readFile(process.env.DIRNAME + '/model/images.json', (err, fileData) => {
+    if (err !== null) {
+        throw err;
+    }
+    
+    data = JSON.parse(fileData);
+    
+    console.log('Data loaded.');
 });
 
-// var client = new Twitter({
-//   consumer_key: process.env.TWITTER_CONSUMER_KEY,
-//   consumer_secret: process.env.TWITTER_CONSUMER_SECRET,
-//   access_token_key: process.env.TWITTER_ACCESS_TOKEN,
-//   access_token_secret: process.env.TWITTER_TOKEN_SECRET
-// });
+router.all('/:width/:height', (req, res) => {
+    var i = 0;
+    var index = -1;
+    var returnFile = null;
+    var width = parseInt('' + req.params.width) || 0;
+    var height = parseInt('' + req.params.height) || 0;
+    var cacheFileName = process.env.DIRNAME + '/cache/' + width + '_' + height + '.jpg';
 
-// var str = '';
-// function doTwitterParse() {
-//   var deferred = Q.defer();
-//   client.get('search/tweets', {q: 'ryan%20gosling', count: 10}, function(error, data, response) {
-//     if (!error) {
-//       // console.log(data.statuses);
-//       var statuses = data.statuses;
+    if (width <= 0 || height <= 0) {
+        res.status(400).json({
+            message: 'Usage: /(uint) :width/(uint) :height'
+        });
+        
+        return;
+    }
 
-//       for (var i = 0; i < statuses.length; i++) {
-//         var words = statuses[i].text.split(' ');
+    if (width > 1000 || height > 1000) {
+        res.status(400).json({
+            message: 'Width or height bigger than 1000.'
+        });
 
-//         for (var j = 0; j < words.length; j++) {
-//           var value = words[j];
-          
-//           if (value.includes('https://t.co')) {
-//             console.log('string getting saved --> ', value);
-//             str = value;
-//             deferred.resolve();
-//             return true;
-//           }
-//         }
-//       }
-//     } else {
-//       console.log(error);
-//     }
-//   });
-//   return deferred.promise;
-// }
-// doTwitterParse().then(function() {
-//   console.log('promise returned and here is the string -->', str);
-//   request(str, function (error, response, body) {
-//     if (!error && response.statusCode == 200) {
-//       var htmlBod = body;
-//       var $ = cheerio.load(htmlBod);
-//       var img = $('meta[property="og:image"]').attr('content');
-//       console.log('found it!', $('meta[property="og:image"]').attr('content'));
-//     }
-//   });
-// });
+        return;
+    }
 
+    if (fs.existsSync(cacheFileName)) {
+        console.log('Using cached');
+        res.sendFile(cacheFileName);
+
+        return;
+    }
+    
+    for (i = 0; i < data.length; i++) {
+        var imageData = data[i];
+        
+        if (imageData.width >= width && imageData.height >= height) {
+            var middleX = imageData.faceX + (imageData.faceWidth / 2);
+            var middleY = imageData.faceY + (imageData.faceHeight / 2);
+            var cropX = middleX - (width / 2);
+            var cropY = middleY - (height / 2);
+            var cropWidth = width;
+            var cropHeight = height;
+            
+            if (cropX <= 0) {
+                cropWidth += cropX * -1;
+                cropX = 0;
+            }
+            
+            if (cropY <= 0) {
+                cropHeight += cropY * -1;
+                cropY = 0;
+            }
+            
+            lwip.open(imageData.filename, (err, image) => {
+                
+                
+                if (err !== null) {
+                    throw null;
+                }
+                
+                image.batch()
+                    .crop(
+                        cropX,
+                        cropY,
+                        cropX + cropWidth,
+                        cropY + cropHeight
+                    ).writeFile(cacheFileName, err => {
+                        if (err !== null) {
+                            throw err;
+                        }
+                        
+                        res.sendFile(cacheFileName);
+                    });
+            });
+            
+            break;
+        }
+    }
+});
+
+router.all('*', (req, res) => {
+    res.status(400).json({
+        message: 'Usage: /(uint) :width/(uint) :height'
+    });
+});
+
+app.use('/', router);
+app.listen(port);
+console.log('Server started on port ' + port);

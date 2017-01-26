@@ -1,14 +1,13 @@
 # placegosling
 
-1. npm install
-2. add a env.js file in the root directory and enter API credentials:
+SETUP:
 
-process.env['TWITTER_CONSUMER_KEY'] = "";
-process.env['TWITTER_CONSUMER_SECRET'] = "";
-process.env['TWITTER_ACCESS_TOKEN'] = "";
-process.env['TWITTER_TOKEN_SECRET'] = "";
+1. You'll need to install these globally on your machine first:
+cmake, make (GCC), pkg-config && opencv
+2. npm install
+3. add a env.js file in the root directory:
 
-NOTE: you get these from creating an app in twitter:
-https://apps.twitter.com/app/new
+process.env['DIRNAME'] = __dirname;
 
-3. node index.js
+4. node generate.js - parses image in /images and finds face. Writes data to JSON
+3. node index.js - runs up a virtual server on 8080 ready for you to add /200/300 or whatever dimensions you want.
